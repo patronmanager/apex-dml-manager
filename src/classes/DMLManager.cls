@@ -58,11 +58,7 @@ public class DMLManager {
 
 			for(SObject obj : objList){
 				SObject existingRecord = existingRecords.get(obj.Id);
-				if((obj.Id != null) && (existingRecord == null)){
-					throw new DMLManagerException('DMLManager ERROR:  An existing record could not be found for object with Id = ' + obj.Id);
-				}
-
-				if(existingRecord != null){
+				if(obj.id != null){
 					checkUpdateAction(obj,existingRecord);
 				} else {
 					checkCreateAction(obj);
@@ -77,13 +73,12 @@ public class DMLManager {
 	}
 	
 	private static void upsertCollection(List<SObject> objList){
-		//This is to deal with the call to upsertAsUser where you pass a singular SObject
-		//We wrap that SObject in a List<SObject> which can't be passed into upsert 
-		//This unpacks that sin and just inserts the solitary record
+		// This is to deal with a call to upsertAsUser with a singular object.
+		// Since we wrap that into a List<SObject> (which can't be passed into an upsert)
+		// we unpack it and upsert the object individually.
 		if(objList.size() == 1){
-			upsert objList.get(0);						
-		}
-		else{
+			upsert objList.get(0);
+		} else {
 			upsert objList;
 		}
 	} 
@@ -99,7 +94,7 @@ public class DMLManager {
 	private static void checkCreateAction(SObject obj){
 		List<String> restrictedFields = cachedRestrictedFields.get(Operation.OP_INSERT).get(obj.getSObjectType());
 		//Save ourselves a trip through the loop below if there are no restricted fields
-		if(restrictedFields == null && restrictedFields.isEmpty())
+		if(restrictedFields == null || restrictedFields.isEmpty())
 			return;
 
 		Map<String,Object> fieldsMap = getFieldMapFromExistingSObject(obj);
@@ -115,8 +110,13 @@ public class DMLManager {
 	private static void checkUpdateAction(SObject obj, SObject existingRecord){
 		List<String> restrictedFields = cachedRestrictedFields.get(Operation.OP_UPDATE).get(obj.getSObjectType());
 		//Save ourselves a trip through the loop below if there are no restricted fields
-		if(restrictedFields == null && restrictedFields.isEmpty())
+		if(restrictedFields == null || restrictedFields.isEmpty()){
 			return;
+		}
+		
+		if(existingRecord == null){
+		    throw new DMLManagerException('DMLManager ERROR:  An existing record could not be found for object with Id = ' + obj.Id);
+		}
 
 		Map<String,Object> fieldsMap = getFieldMapFromExistingSObject(obj);
 		
