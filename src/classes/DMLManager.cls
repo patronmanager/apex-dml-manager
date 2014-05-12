@@ -6,40 +6,48 @@ public class DMLManager {
 	
 	public enum Operation {OP_INSERT,OP_UPDATE,OP_DELETE,OP_UPSERT}
 	
-	/** Convenience methods...this is what will be called from the code **/
-	public static void insertAsUser(sObject objList){performDMLOperation(new List<sObject>{objList},Operation.OP_INSERT);}
-	public static void updateAsUser(sObject objList){performDMLOperation(new List<sObject>{objList},Operation.OP_UPDATE);}
-	public static void upsertAsUser(sObject objList){performDMLOperation(new List<sObject>{objList},Operation.OP_UPSERT);}
-	public static void deleteAsUser(sObject objList){performDMLOperation(new List<sObject>{objList},Operation.OP_DELETE);}
+	// CRUD/FLS-safe DML operations. These honor the CRUD and FLS permissions of the running user
+	public static void insertAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_INSERT);}
+	public static void updateAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPDATE);}
+	public static void upsertAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPSERT);}
+	public static void deleteAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_DELETE);}
 	public static void insertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_INSERT);}
 	public static void updateAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPDATE);}
 	public static void upsertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPSERT);}
 	public static void deleteAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_DELETE);}
-
-	/** Custom Exception Classes **/
+	
+	// Pass-thru methods to raw DML operations. 
+	// Use these sparingly, and only with good reason, since the DML operations are not CRUD/FLS safe
+	public static void insertAsSystem(sObject obj){ insert obj; }
+	public static void updateAsSystem(sObject obj){ update obj; }
+	public static void upsertAsSystem(sObject obj){ upsert obj; }
+	public static void deleteAsSystem(sObject obj){ delete obj; }
+	public static void insertAsSystem(List<SObject> objList){ insert objList; }
+	public static void updateAsSystem(List<SObject> objList){ update objList; }
+	public static void upsertAsSystem(List<SObject> objList){ upsert objList; }
+	public static void deleteAsSystem(List<SObject> objList){ delete objList; }
+	
+	// Custom Exception Classes
 	public virtual class DMLManagerException extends Exception{
 		public SObjectType objType {get; private set;}
 		public Operation op{get; private set;}
 	}
+
 	public class CRUDException extends DMLManagerException{
 		public CRUDException(SObjectType objType, Operation op){
+			this('Access Denied: ' + op + ' on ' + objType);
 			this.objType = objType;
 			this.op = op;
-		}
-		public virtual override String getMessage(){
-			return 'Access Denied: ' + op + ' on ' + objType;
 		}
 	}
  
 	public class FLSException extends DMLManagerException{
 		public SObjectField field{get; private set;}	
 		public FLSException(SObjectType objType, SObjectField field, Operation op){
+			this('Access Denied: ' + op + ' on ' + objType + '.' + field);
 			this.objType = objType;
 			this.op = op;
 			this.field = field;
-		}
- 		public override String getMessage(){
-			return 'Access Denied: ' + op + ' on ' + objType + '.' + field;
 		}
 	}
 		
@@ -94,8 +102,9 @@ public class DMLManager {
 	private static void checkCreateAction(SObject obj){
 		List<String> restrictedFields = cachedRestrictedFields.get(Operation.OP_INSERT).get(obj.getSObjectType());
 		//Save ourselves a trip through the loop below if there are no restricted fields
-		if(restrictedFields == null || restrictedFields.isEmpty())
+		if(restrictedFields == null || restrictedFields.isEmpty()){
 			return;
+		}
 
 		Map<String,Object> fieldsMap = getFieldMapFromExistingSObject(obj);
 		

@@ -1,9 +1,66 @@
 @isTest
 private class Test_DMLManager {
 	
+	static testMethod void systemInsert(){
+		Opportunity o1 = new Opportunity(Name='Original1 Opp',StageName='Won',CloseDate=Date.today());
+		
+		User newUser = ensureRestrictedUser();
+		
+		System.runAs(newUser){
+			DMLManager.insertAsSystem(new Opportunity[]{o1});
+		}
+	}
+
+	static testMethod void systemUpdate(){
+		Account a1 = new Account(Name='Apple Account');
+
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert a1;
+		}
+		
+		User newUser = ensureRestrictedUser();
+		
+		System.runAs(newUser){
+			a1.Name = 'Apple Updated';
+			DMLManager.updateAsSystem(new Account[]{a1});
+			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
+			System.assertEquals('Apple Updated', a1Reload.Name);
+		}
+	}
+	
+	static testMethod void systemUpsert(){
+		Account a1 = new Account(Name='Apple Account');
+
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert a1;
+		}
+		
+		Account a1Clone = new Account(Id = a1.Id, Name= 'Apple Updated');
+		
+		User newUser = ensureRestrictedUser();
+		
+		System.runAs(newUser){
+			DMLManager.upsertAsSystem(new Account[]{a1Clone});
+			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
+			System.assertEquals('Apple Updated', a1Reload.Name);
+		}
+	}
+
+	static testMethod void systemDelete(){
+		User newUser = ensureRestrictedUser();
+
+		System.runAs(newUser){
+			Account a1 = new Account(Name='Apple Account');
+			insert a1;
+			DMLManager.deleteAsSystem(new Account[]{a1});
+		}
+	}
+
 	static testMethod void flsRestrictedInsert(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
-		insert new Campaign[]{c1};
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert new Campaign[]{c1};
+		}
 		
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',CampaignId=c1.Id,StageName='Won',CloseDate=Date.today());
 		
@@ -27,7 +84,9 @@ private class Test_DMLManager {
 	static testMethod void flsUnrestrictedUpsert(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
 		Campaign c2 = new Campaign(Name = 'Test2 Campaign');
-		insert new Campaign[]{c1,c2};
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert new Campaign[]{c1,c2};
+		}
 		
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',CampaignId=c1.Id,StageName='Won',CloseDate=Date.today());
 		DMLManager.upsertAsUser(new Opportunity[]{o1});
@@ -52,10 +111,12 @@ private class Test_DMLManager {
 	static testMethod void flsRestrictedUpsert(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
 		Campaign c2 = new Campaign(Name = 'Test2 Campaign');
-		insert new Campaign[]{c1,c2};
-		
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',CampaignId=c1.Id,StageName='Won',CloseDate=Date.today());
-		insert o1;
+
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert new SObject[]{c1,c2,o1};
+		}
+		
 		System.assert(o1.Id != null);
 
 		o1.Name='Updated1 Opp';
@@ -84,10 +145,12 @@ private class Test_DMLManager {
 	static testMethod void flsRestrictedUpdateOfFieldNotSelected(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
 		Campaign c2 = new Campaign(Name = 'Test2 Campaign');
-		insert new Campaign[]{c1,c2};
-		
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',CampaignId=c1.Id,StageName='Won',CloseDate=Date.today());
-		insert o1;
+
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert new SObject[]{c1,c2,o1};
+		}
+		
 		System.assert(o1.Id != null);
 		
 		Opportunity o1Reload = [SELECT Id, Name FROM Opportunity WHERE Id = :o1.Id];
@@ -135,7 +198,9 @@ private class Test_DMLManager {
 		User newUser = ensureRestrictedUser();
 
 		Campaign c1 = new Campaign(Name='Test1 Campaign');
-		insert c1;
+		System.runAs(new User(Id = UserInfo.getUserId())){
+			insert c1;
+		}
 
       	System.runAs(newUser) {
 			// First try to insert a new object (including field two)
@@ -173,6 +238,25 @@ private class Test_DMLManager {
 			}
       	}
 	}
+	
+	static testmethod void testFailedUpdateWithErroneousId(){
+		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
+		Id cId = null;
+	
+		insert new SObject[]{c1};
+		cId = c1.Id;
+		delete c1;
+		
+		try{
+			Campaign c1Resurrected = new Campaign(Id = cId, Name = 'Resurrected Campaign');
+			DMLManager.upsertAsUser(c1Resurrected);
+			System.assert(false,'Expected a DMLManagerException! Attempting to update a record with an erroneous Id should fail');
+		}
+		catch(DMLManager.DMLManagerException dmle){
+			//expected
+			System.assert(dmle.getMessage().contains('An existing record could not be found'));
+		}
+	} 
 	
 	private static User ensureRestrictedUser(){
 		Profile p = [SELECT Id FROM Profile WHERE Name='Read Only']; 
