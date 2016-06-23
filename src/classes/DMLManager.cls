@@ -117,11 +117,8 @@ public class DMLManager {
 	} 
 	
 	private static Map<String,Object> getFieldMapFromExistingSObject(SObject obj){
-		// Get actual fields present in object.  This serialization technique removes implicit nulls.
-		String s = JSON.serialize(obj);
-		Map<String,Object> fieldsMap = (Map<String,Object>) JSON.deserializeUntyped(s);
-		fieldsMap.remove('attributes');
-		return fieldsMap;		
+		// Get actual fields present in object.  The getPopulatedFieldsAsMap method removes implicit nulls.
+		return obj.getPopulatedFieldsAsMap();
 	}
 	
 	private static void checkCreateAction(SObject obj){
