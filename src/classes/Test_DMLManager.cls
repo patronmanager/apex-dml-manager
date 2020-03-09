@@ -293,6 +293,7 @@ private class Test_DMLManager {
       		
       	insert newUser;
       	
+      	assignObjectPermission(newUser,'Account',true,true,false);
       	assignObjectPermission(newUser,'Opportunity',true,true,false);
       	
       	return newUser;
