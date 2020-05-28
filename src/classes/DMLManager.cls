@@ -1,5 +1,5 @@
 /**
-* Copyright (c), 2014, Patron Holdings LLC
+* Copyright (c), PatronManager LLC
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without modification,
@@ -23,7 +23,7 @@
 *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
-public class DMLManager {
+public inherited sharing class DMLManager {
 	// Items in the following set must be entered in lower case
 	private static Set<String> exceptionValues = new Set<String> {'id','isdeleted','createddate','systemmodstamp','lastmodifiedbyid','createdbyid','lastmodifieddate'};
 
@@ -36,10 +36,12 @@ public class DMLManager {
 	public static void updateAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPDATE);}
 	public static void upsertAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPSERT);}
 	public static void deleteAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_DELETE);}
+	public static void mergeAsUser(sObject masterObj, SObject mergeObj){ performDMLMergeOperation(masterObj, new List<SObject>{mergeObj});}
 	public static void insertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_INSERT);}
 	public static void updateAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPDATE);}
 	public static void upsertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPSERT);}
 	public static void deleteAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_DELETE);}
+	public static void mergeAsUser(SObject masterObj, List<SObject> mergeList){ performDMLMergeOperation(masterObj, mergeList);}
 	
 	// Pass-thru methods to raw DML operations. 
 	// Use these sparingly, and only with good reason, since the DML operations are not CRUD/FLS safe
@@ -47,10 +49,12 @@ public class DMLManager {
 	public static void updateAsSystem(sObject obj){ update obj; }
 	public static void upsertAsSystem(sObject obj){ upsert obj; }
 	public static void deleteAsSystem(sObject obj){ delete obj; }
+	public static void mergeAsSystem(SObject masterObj, SObject mergeObj){ Database.merge(masterObj, mergeObj); }
 	public static void insertAsSystem(List<SObject> objList){ insert objList; }
 	public static void updateAsSystem(List<SObject> objList){ update objList; }
 	public static void upsertAsSystem(List<SObject> objList){ upsert objList; }
 	public static void deleteAsSystem(List<SObject> objList){ delete objList; }
+	public static void mergeAsSystem(SObject masterObj, List<SObject> mergeList){ Database.merge(masterObj, mergeList); }
 	
 	// Custom Exception Classes
 	public virtual class DMLManagerException extends Exception{
@@ -103,6 +107,26 @@ public class DMLManager {
 			else if (dmlOperation == Operation.OP_UPDATE){update objList;} 
 				else if (dmlOperation == Operation.OP_UPSERT){upsertCollection(objList);}
 					else if (dmlOperation == Operation.OP_DELETE){delete objList;}
+	}
+	
+	/**
+	 * Checks for CRUD on the master & merge objects and throws error if they don't have the proper object permission
+	 * If all checks pass, the merge operation is performed.
+	 * 
+	 * @param masterObj SObject the data will be merged into
+	 * @param mergeList List of SObjects that will be merged into the masterObj
+	 * 
+	 */
+	private static void performDMLMergeOperation(SObject masterObj, List<SObject> mergeList) {
+		
+		// Make sure the master object can be updated.
+		checkCRUDPermission(new Set<SObjectType>{masterObj.getSObjectType()},Operation.OP_UPDATE);
+		
+		// Make sure the merge object can be deleted.
+		checkCRUDPermission(new Set<SObjectType>{mergeList[0].getSObjectType()},Operation.OP_DELETE);
+		
+		// If no errors have been thrown to this point, execute the merge operation.
+		Database.merge(masterObj, mergeList);
 	}
 	
 	private static void upsertCollection(List<SObject> objList){
