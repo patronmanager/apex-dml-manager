@@ -114,7 +114,7 @@ public inherited sharing class DMLManager {
 	 * If all checks pass, the merge operation is performed.
 	 * 
 	 * @param masterObj SObject the data will be merged into
-	 * @param mergeObj SObject that will be merged into masterObj
+	 * @param mergeList List of SObjects that will be merged into the masterObj
 	 * 
 	 */
 	private static void performDMLMergeOperation(SObject masterObj, List<SObject> mergeList) {
