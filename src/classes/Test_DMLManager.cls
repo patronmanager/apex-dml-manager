@@ -1,5 +1,5 @@
 /**
-* Copyright (c), 2014, Patron Holdings LLC
+* Copyright (c), 2014, PatronManager LLC
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without modification,
@@ -80,7 +80,38 @@ private class Test_DMLManager {
 			DMLManager.deleteAsSystem(new Account[]{a1});
 		}
 	}
-
+	
+	@IsTest
+	static void mergeAsSystem_Expect_Success(){
+		// Insert a master account and two merge accounts
+		List<Account> accList = new List<Account>{
+			new Account(Name = 'Master Account'),
+			new Account(Name = 'Merge One'),
+			new Account(Name = 'Merge Two')
+		
+		};
+		
+		User newUser = ensureRestrictedUser();
+		
+		System.runAs(newUser){
+			insert accList;
+			
+			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
+			List<Account> mergeList = [SELECT Id, Name FROM Account WHERE Name LIKE 'Merge%'];
+			System.assertEquals(2, mergeList.size());
+			
+			DMLManager.mergeAsSystem(masterAcct, mergeList);
+		}
+		
+		// Make sure 'Master Account' is still there.
+		Account masterAcct = [SELECT Id FROM Account WHERE Name = 'Master Account'];
+		
+		//Make sure merge accounts are gone
+		List<Account> mergeList = [SELECT Id FROM Account WHERE Name LIKE 'Merge%'];
+		System.assertEquals(0, mergeList.size());
+	
+	}
+	
 	static testMethod void flsRestrictedInsert(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
 		System.runAs(new User(Id = UserInfo.getUserId())){
@@ -262,6 +293,110 @@ private class Test_DMLManager {
 				System.assertEquals(DMLManager.Operation.OP_DELETE,crude.op);
 			}
       	}
+	}
+	
+	@IsTest
+	static void mergeAsUser_When_UserHasCorrectPermissions_Expect_Success(){
+		// Insert a master account and two merge accounts
+		List<Account> accList = new List<Account>{
+			new Account(Name = 'Master Account'),
+			new Account(Name = 'Merge One'),
+			new Account(Name = 'Merge Two')
+		};
+		
+		User newUser = ensureRestrictedUser();
+		//Assign read, update & delete permissions to the Account
+		assignObjectPermission(newUser,'Account',false,true,true);
+		
+		System.runAs(newUser){
+			insert accList;
+			
+			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
+			List<Account> mergeList = [SELECT Id, Name FROM Account WHERE Name LIKE 'Merge%'];
+			System.assertEquals(2, mergeList.size());
+			
+			DMLManager.mergeAsUser(masterAcct, mergeList);
+		}
+		
+		// Make sure 'Master Account' is still there.
+		Account masterAcct = [SELECT Id FROM Account WHERE Name = 'Master Account'];
+		
+		//Make sure merge accounts are gone
+		List<Account> mergeList = [SELECT Id FROM Account WHERE Name LIKE 'Merge%'];
+		System.assertEquals(0, mergeList.size());
+	
+	}
+	
+	@IsTest
+	static void mergeAsUser_When_UserDoesNotHaveEditPermission_Expect_Error(){
+		// Insert a master account and two merge accounts
+		List<Account> accList = new List<Account>{
+			new Account(Name = 'Master Account'),
+			new Account(Name = 'Merge One'),
+			new Account(Name = 'Merge Two')
+		};
+		
+		User newUser = ensureRestrictedUser();
+		//Assign permissions to the Account but not edit (delete depends on edit so needs to be false too)
+		assignObjectPermission(newUser,'Account',true,false,false);
+		
+		System.runAs(newUser){
+			insert accList;
+			
+			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
+			List<Account> mergeList = [SELECT Id, Name FROM Account WHERE Name LIKE 'Merge%'];
+			System.assertEquals(2, mergeList.size());
+			
+			try {
+				DMLManager.mergeAsUser(masterAcct, mergeList);
+				System.assert(false,'Expected a DML Error, newUser shouldn\'t be able to merge Account because they don\'t have EDIT permission');
+			} catch (DMLManager.CRUDException crudex){
+				//expected
+				System.assertEquals(Account.SObjectType,crudex.objType);
+				System.assertEquals(DMLManager.Operation.OP_UPDATE,crudex.op);
+			}
+		}
+		
+		// 'Master Account' and merge accounts should still be there.
+		accList = [SELECT Id FROM Account];
+		System.assertEquals(3, accList.size());
+	
+	}
+	
+	@IsTest
+	static void mergeAsUser_When_UserDoesNotHaveDeletePermission_Expect_Error(){
+		// Insert a master account and two merge accounts
+		List<Account> accList = new List<Account>{
+			new Account(Name = 'Master Account'),
+			new Account(Name = 'Merge One'),
+			new Account(Name = 'Merge Two')
+		};
+		
+		User newUser = ensureRestrictedUser();
+		//Assign permissions to the Account but not 'Delete'
+		assignObjectPermission(newUser,'Account',true,true,false);
+		
+		System.runAs(newUser){
+			insert accList;
+			
+			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
+			List<Account> mergeList = [SELECT Id, Name FROM Account WHERE Name LIKE 'Merge%'];
+			System.assertEquals(2, mergeList.size());
+			
+			try {
+				DMLManager.mergeAsUser(masterAcct, mergeList);
+				System.assert(false,'Expected a DML Error, newUser shouldn\'t be able to merge Account because they don\'t have DELETE permission');
+			} catch (DMLManager.CRUDException crudex){
+				//expected
+				System.assertEquals(Account.SObjectType,crudex.objType);
+				System.assertEquals(DMLManager.Operation.OP_DELETE,crudex.op);
+			}
+		}
+		
+		// 'Master Account' and merge accounts should still be there.
+		accList = [SELECT Id FROM Account];
+		System.assertEquals(3, accList.size());
+	
 	}
 	
 	static testmethod void testFailedUpdateWithErroneousId(){
