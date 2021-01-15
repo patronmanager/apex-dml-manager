@@ -1,5 +1,5 @@
 /**
-* Copyright (c), PatronManager LLC
+* Copyright (c), 2014, Patron Holdings LLC
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without modification,
@@ -26,12 +26,75 @@
 @isTest
 private class Test_DMLManager {
 	
+	@TestSetup
+	static void testSetup() {
+		createRestrictedUser();
+	}
+
+	/**
+	 * Creates a User that has only "Read" access to Accounts, Contacts and Opps
+	 */
+	private static void createRestrictedUser() {
+		// PMGR-9655 - Starting with Spring '21, the "Read Only" profile may not exist. We should default to using the
+		// new "Minimum Access - Salesforce" profile, falling back to "Read Only" otherwise.
+		List<Profile> profileList = [SELECT Id, Name FROM Profile WHERE Name IN ('Minimum Access - Salesforce', 'Read Only') ORDER BY Name];
+		System.assert(
+			profileList.size() >= 1,
+			'Unable to create a "restricted" User for testing purposes because we are not able to find the required User Profiles.'
+		);
+		User restrictedUser = new User(
+			Alias = 'standt',
+			Email='standarduser@testorg.com',
+			EmailEncodingKey='UTF-8',
+			LastName='Testing',
+			LanguageLocaleKey='en_US',
+			LocaleSidKey='en_US',
+			// Use the first Profile in the list. Because we've ordered by name, this causes us to use
+			// "Minimum Access - Salesforce" if it's present.
+			ProfileId = profileList[0].Id,
+			TimeZoneSidKey='America/Los_Angeles',
+			Username='crudmanageruser1@testorg.com'
+		);
+		insert restrictedUser;
+		
+		// Create a Permission Set that grants "Read" access to Account, Contact and Opportunity
+		PermissionSet ps = new PermissionSet(Label = 'Restricted User', Name = 'RestrictedUser');
+		insert ps;
+		
+		List<ObjectPermissions> objectPerms = new List<ObjectPermissions>();
+		objectPerms.add(createObjectPerms(ps.Id, 'Account', true, false, false, false));
+		objectPerms.add(createObjectPerms(ps.Id, 'Contact', true, false, false, false));
+		objectPerms.add(createObjectPerms(ps.Id, 'Opportunity', true, false, false, false));
+		insert objectPerms;
+		
+		// Assign this perm set to our restricted user
+		PermissionSetAssignment psa = new PermissionSetAssignment(AssigneeId = restrictedUser.Id, PermissionSetId = ps.Id);
+		insert psa;
+	}
+	
+	private static ObjectPermissions createObjectPerms(
+		Id parentId, String objectType, Boolean canRead, Boolean canCreate, Boolean canEdit, Boolean canDelete
+	) {
+		return new ObjectPermissions(
+			ParentId = parentId,
+			SobjectType = objectType,
+			PermissionsRead = canRead,
+			PermissionsCreate = canCreate,
+			PermissionsEdit = canEdit,
+			PermissionsDelete = canDelete
+		);
+	}
+	
+	private static User getRestrictedUser() {
+		return [SELECT Id FROM User WHERE Username = 'crudmanageruser1@testorg.com'];
+	}
+	
 	static testMethod void systemInsert(){
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',StageName='Won',CloseDate=Date.today());
 		
-		User newUser = ensureRestrictedUser();
+		User restrictedUser = getRestrictedUser();
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			DMLManager.insertAsSystem(new Opportunity[]{o1});
 		}
 	}
@@ -42,10 +105,10 @@ private class Test_DMLManager {
 		System.runAs(new User(Id = UserInfo.getUserId())){
 			insert a1;
 		}
+
+		User restrictedUser = getRestrictedUser();
 		
-		User newUser = ensureRestrictedUser();
-		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			a1.Name = 'Apple Updated';
 			DMLManager.updateAsSystem(new Account[]{a1});
 			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
@@ -62,9 +125,9 @@ private class Test_DMLManager {
 		
 		Account a1Clone = new Account(Id = a1.Id, Name= 'Apple Updated');
 		
-		User newUser = ensureRestrictedUser();
+		User restrictedUser = getRestrictedUser();
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			DMLManager.upsertAsSystem(new Account[]{a1Clone});
 			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
 			System.assertEquals('Apple Updated', a1Reload.Name);
@@ -72,9 +135,9 @@ private class Test_DMLManager {
 	}
 
 	static testMethod void systemDelete(){
-		User newUser = ensureRestrictedUser();
+		User restrictedUser = getRestrictedUser();
 
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			Account a1 = new Account(Name='Apple Account');
 			insert a1;
 			DMLManager.deleteAsSystem(new Account[]{a1});
@@ -88,12 +151,12 @@ private class Test_DMLManager {
 			new Account(Name = 'Master Account'),
 			new Account(Name = 'Merge One'),
 			new Account(Name = 'Merge Two')
-		
+			
 		};
 		
-		User newUser = ensureRestrictedUser();
+		User restrictedUser = getRestrictedUser();
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			insert accList;
 			
 			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
@@ -120,12 +183,15 @@ private class Test_DMLManager {
 		
 		Opportunity o1 = new Opportunity(Name='Original1 Opp',CampaignId=c1.Id,StageName='Won',CloseDate=Date.today());
 		
-		User newUser = ensureRestrictedUser();
-		
-		System.runAs(newUser){
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Create" perm, in addition to "Read"
+		assignObjectPermission(restrictedUser,'Opportunity',true,false,false);
+
+		System.runAs(restrictedUser){
 			try{
 				DMLManager.insertAsUser(new Opportunity[]{o1});
-				System.assert(false,'Expected a DML Error! newUser shouldn\'t be able to insert Opportunity.CampaignId');
+				System.assert(false,'Expected a DML Error! Restricted User shouldn\'t be able to insert Opportunity.CampaignId');
 			}
 			catch(DMLManager.FLSException flse){
 				//expected
@@ -180,12 +246,15 @@ private class Test_DMLManager {
 		
 		Opportunity o2 = new Opportunity(Name='Test2 Opp',CampaignId=c2.Id,StageName='Won',CloseDate=Date.today());
 		
-		User newUser = ensureRestrictedUser();
-		
-		System.runAs(newUser){
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Create" and "Edit" perm, in addition to "Read"
+		assignObjectPermission(restrictedUser,'Opportunity',true,true,false);
+
+		System.runAs(restrictedUser){
 			try{
 				DMLManager.upsertAsUser(new Opportunity[]{o1,o2});
-				System.assert(false,'Expected a DML Error! newUser shouldn\'t be able to update Opportunity.CampaignId');
+				System.assert(false,'Expected a DML Error! Restricted User shouldn\'t be able to update Opportunity.CampaignId');
 			}
 			catch(DMLManager.FLSException flse){
 				//expected
@@ -213,12 +282,15 @@ private class Test_DMLManager {
 		o1Reload.Name='Updated1 Opp';
 		o1Reload.CampaignId = c2.Id;
 		
-		User newUser = ensureRestrictedUser();
-		
-		System.runAs(newUser){
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Create" and "Edit" perm, in addition to "Read"
+		assignObjectPermission(restrictedUser,'Opportunity',true,true,false);
+
+		System.runAs(restrictedUser){
 			try{
 				DMLManager.updateAsUser(new Opportunity[]{o1Reload});
-				System.assert(false,'Expected a DML Error! newUser shouldn\'t be able to update Opportunity.CampaignId');
+				System.assert(false,'Expected a DML Error! Restricted User shouldn\'t be able to update Opportunity.CampaignId');
 			}
 			catch(DMLManager.FLSException flse){
 				//expected
@@ -251,19 +323,19 @@ private class Test_DMLManager {
 	}
 
 	static testMethod void crudRestrictedInsertUpdateDelete(){
-		User newUser = ensureRestrictedUser();
+		User restrictedUser = getRestrictedUser();
 
 		Campaign c1 = new Campaign(Name='Test1 Campaign');
 		System.runAs(new User(Id = UserInfo.getUserId())){
 			insert c1;
 		}
 
-      	System.runAs(newUser) {
+      	System.runAs(restrictedUser) {
 			// First try to insert a new object (including field two)
 			try{
 				Campaign c2 = new Campaign(Name='Test2  Campaign');
 				DMLManager.insertAsUser(c2);
-				System.assert(false,'Expected a DML Error!, newUser shouldn\'t be able to insert a Campaign');
+				System.assert(false,'Expected a DML Error!, Restricted User shouldn\'t be able to insert a Campaign');
 			}
 			catch(DMLManager.CRUDException crude){
 				//expected
@@ -275,7 +347,7 @@ private class Test_DMLManager {
 			try{
 				c1.Name = 'Updated1 Campaign';
 				DMLManager.updateAsUser(c1);
-				System.assert(false,'Expected a DML Error!, newUser shouldn\'t be able to update a Campaign');
+				System.assert(false,'Expected a DML Error!, Restricted User shouldn\'t be able to update a Campaign');
 			}
 			catch(DMLManager.CRUDException crude){
 				//expected
@@ -285,7 +357,7 @@ private class Test_DMLManager {
 			
 			try{
 				DMLManager.deleteAsUser(c1);
-				System.assert(false,'Expected a DML Error!, newUser shouldn\'t be able to delete a Campaign');
+				System.assert(false,'Expected a DML Error!, Restricted User shouldn\'t be able to delete a Campaign');
 			}
 			catch(DMLManager.CRUDException crude){
 				//expected
@@ -304,11 +376,12 @@ private class Test_DMLManager {
 			new Account(Name = 'Merge Two')
 		};
 		
-		User newUser = ensureRestrictedUser();
-		//Assign read, update & delete permissions to the Account
-		assignObjectPermission(newUser,'Account',false,true,true);
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Update" and "Delete" permissions to the Account, in addition to "Read"
+		assignObjectPermission(restrictedUser,'Account',false,true,true);
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			insert accList;
 			
 			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
@@ -336,11 +409,12 @@ private class Test_DMLManager {
 			new Account(Name = 'Merge Two')
 		};
 		
-		User newUser = ensureRestrictedUser();
-		//Assign permissions to the Account but not edit (delete depends on edit so needs to be false too)
-		assignObjectPermission(newUser,'Account',true,false,false);
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Create" perms on Account in addition to "Read", but not "Edit" or "Delete"
+		assignObjectPermission(restrictedUser,'Account',true,false,false);
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			insert accList;
 			
 			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
@@ -349,7 +423,7 @@ private class Test_DMLManager {
 			
 			try {
 				DMLManager.mergeAsUser(masterAcct, mergeList);
-				System.assert(false,'Expected a DML Error, newUser shouldn\'t be able to merge Account because they don\'t have EDIT permission');
+				System.assert(false,'Expected a DML Error, Restricted User shouldn\'t be able to merge Account because they don\'t have EDIT permission');
 			} catch (DMLManager.CRUDException crudex){
 				//expected
 				System.assertEquals(Account.SObjectType,crudex.objType);
@@ -372,11 +446,12 @@ private class Test_DMLManager {
 			new Account(Name = 'Merge Two')
 		};
 		
-		User newUser = ensureRestrictedUser();
-		//Assign permissions to the Account but not 'Delete'
-		assignObjectPermission(newUser,'Account',true,true,false);
+		User restrictedUser = getRestrictedUser();
+
+		// Grant "Create" and "Edit" perms on Account in addition to "Read", but not "Delete"
+		assignObjectPermission(restrictedUser,'Account',true,true,false);
 		
-		System.runAs(newUser){
+		System.runAs(restrictedUser){
 			insert accList;
 			
 			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
@@ -385,7 +460,7 @@ private class Test_DMLManager {
 			
 			try {
 				DMLManager.mergeAsUser(masterAcct, mergeList);
-				System.assert(false,'Expected a DML Error, newUser shouldn\'t be able to merge Account because they don\'t have DELETE permission');
+				System.assert(false,'Expected a DML Error, Restricted User shouldn\'t be able to merge Account because they don\'t have DELETE permission');
 			} catch (DMLManager.CRUDException crudex){
 				//expected
 				System.assertEquals(Account.SObjectType,crudex.objType);
@@ -417,22 +492,7 @@ private class Test_DMLManager {
 			System.assert(dmle.getMessage().contains('An existing record could not be found'));
 		}
 	} 
-	
-	private static User ensureRestrictedUser(){
-		Profile p = [SELECT Id FROM Profile WHERE Name='Read Only']; 
-		
-		User newUser = new User(Alias = 'standt', Email='standarduser@testorg.com', 
-	      	EmailEncodingKey='UTF-8', LastName='Testing', LanguageLocaleKey='en_US', 
-    	  	LocaleSidKey='en_US', ProfileId = p.Id, 
-      		TimeZoneSidKey='America/Los_Angeles', UserName='crudmanageruser1@testorg.com');
-      		
-      	insert newUser;
-      	
-      	assignObjectPermission(newUser,'Opportunity',true,true,false);
-      	
-      	return newUser;
-	}
-	
+
 	private static void assignObjectPermission(User u, String objectType, Boolean create, Boolean edit, Boolean remove){
       	PermissionSet ps = new PermissionSet(Name = 'Enable' + objectType, Label = 'Enable ' + objectType);
   		insert ps;									
