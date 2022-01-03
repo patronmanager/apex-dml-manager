@@ -500,16 +500,26 @@ private class Test_DMLManager {
 		ctc.FirstName = 'Jeremiah';
 		ctc.LastName = 'Matthews';
 
-		DMLManager.dmlOperations = new InertDmlOperations();
-
+		// ------ First let's clearly assert the default DML operation is working ------
 		DMLManager.insertAsUser(ctc);
-
+		
 		String query = 'select Id from Contact where FirstName=\'' + ctc.FirstName + '\' and LastName=\'' + ctc.LastName + '\'';
 		List<Contact> actualContactList = Database.query(query);
+		System.assertEquals(1, actualContactList.size(), 'The Salesforce database should contain the new Contact.');
+
+		// ------ Now let's test the DML Operation injection ------
+		ctc.LastName = 'Long';
+
+		// Injecting the inert DML class
+		DMLManager.dmlOperations = new InertDmlOperations();
+
+		DMLManager.updateAsUser(ctc);
 
 		// Since the InertDmlOperation does nothing, the DMLManager operation respectively does nothing,
 		// therefore the Contact is NOT saved within Salesforce.
-		System.assertEquals(0, actualContactList.size(), 'The Contact should not exist in Salesforce.');
+		query = 'select LastName from Contact where Id=\'' + ctc.Id + '\'';
+		actualContactList = Database.query(query);
+		System.assertNotEquals(ctc.LastName, actualContactList.get(0).LastName, 'The Contact should retain the original data.');
 	}
 
 	private class InertDmlOperations implements DMLManager.IDML {
