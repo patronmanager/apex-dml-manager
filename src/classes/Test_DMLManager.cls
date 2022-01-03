@@ -491,7 +491,48 @@ private class Test_DMLManager {
 			//expected
 			System.assert(dmle.getMessage().contains('An existing record could not be found'));
 		}
-	} 
+	}
+
+	@IsTest
+	static void dmlOperation_When_CustomInertDmlOperationsAreSpecified_Expect_NoChangesWithinServer() {
+
+		Contact ctc = new Contact();
+		ctc.FirstName = 'Jeremiah';
+		ctc.LastName = 'Matthews';
+
+		DMLManager.dmlOperations = new InertDmlOperations();
+
+		DMLManager.insertAsUser(ctc);
+
+		String query = 'select Id from Contact where FirstName=\'' + ctc.FirstName + '\' and LastName=\'' + ctc.LastName + '\'';
+		List<Contact> actualContactList = Database.query(query);
+
+		// Since the InertDmlOperation does nothing, the DMLManager operation respectively does nothing,
+		// therefore the Contact is NOT saved within Salesforce.
+		System.assertEquals(0, actualContactList.size(), 'The Contact should not exist in Salesforce.');
+	}
+
+	private class InertDmlOperations implements DMLManager.IDML {
+		public List<Database.DeleteResult> deleteOperation(List<SObject> recordsToDelete) {
+			return null;
+		}
+
+		public List<Database.SaveResult> insertOperation(List<SObject> recordsToInsert) {
+			return null;
+		}
+
+		public List<Database.MergeResult> mergeOperation(sObject masterRecord, List<SObject> duplicateRecords) {
+			return null;
+		}
+
+		public List<Database.SaveResult> updateOperation(List<SObject> recordsToUpdate) {
+			return null;
+		}
+
+		public List<Database.UpsertResult> upsertOperation(List<SObject> recordsToUpsert) {
+			return null;
+		}
+	}
 
 	private static void assignObjectPermission(User u, String objectType, Boolean create, Boolean edit, Boolean remove){
       	PermissionSet ps = new PermissionSet(Name = 'Enable' + objectType, Label = 'Enable ' + objectType);
