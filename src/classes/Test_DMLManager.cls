@@ -503,44 +503,42 @@ private class Test_DMLManager {
 		// ------ First let's clearly assert the default DML operation is working ------
 		DMLManager.insertAsUser(ctc);
 		
-		String query = 'select Id from Contact where FirstName=\'' + ctc.FirstName + '\' and LastName=\'' + ctc.LastName + '\'';
-		List<Contact> actualContactList = Database.query(query);
+		List<Contact> actualContactList = [select Id from Contact where FirstName= :ctc.FirstName and LastName= :ctc.LastName];
 		System.assertEquals(1, actualContactList.size(), 'The Salesforce database should contain the new Contact.');
 
 		// ------ Now let's test the DML Operation injection ------
 		ctc.LastName = 'Long';
 
 		// Injecting the inert DML class
-		DMLManager.dmlOperations = new InertDmlOperations();
+		DMLManager.setDmlImplementation(new InertDML());
 
 		DMLManager.updateAsUser(ctc);
 
-		// Since the InertDmlOperation does nothing, the DMLManager operation respectively does nothing,
+		// Since the InertDml does nothing, the DMLManager operation respectively does nothing,
 		// therefore the Contact is NOT saved within Salesforce.
-		query = 'select LastName from Contact where Id=\'' + ctc.Id + '\'';
-		actualContactList = Database.query(query);
+		actualContactList = [select LastName from Contact where Id= :ctc.Id];
 		System.assertNotEquals(ctc.LastName, actualContactList.get(0).LastName, 'The Contact should retain the original data.');
 	}
 
-	private class InertDmlOperations implements DMLManager.IDML {
-		public List<Database.DeleteResult> deleteOperation(List<SObject> recordsToDelete) {
-			return null;
+	private class InertDml extends DMLManager.SimpleDML {
+		public override void dmlDelete(List<SObject> recordsToDelete) {
+			// Do nothing.
 		}
 
-		public List<Database.SaveResult> insertOperation(List<SObject> recordsToInsert) {
-			return null;
+		public override void dmlInsert(List<SObject> recordsToInsert) {
+			// Do nothing.
 		}
 
-		public List<Database.MergeResult> mergeOperation(sObject masterRecord, List<SObject> duplicateRecords) {
-			return null;
+		public override void dmlMerge(sObject masterRecord, List<SObject> duplicateRecords) {
+			// Do nothing.
 		}
 
-		public List<Database.SaveResult> updateOperation(List<SObject> recordsToUpdate) {
-			return null;
+		public override void dmlUpdate(List<SObject> recordsToUpdate) {
+			// Do nothing.
 		}
 
-		public List<Database.UpsertResult> upsertOperation(List<SObject> recordsToUpsert) {
-			return null;
+		public override void dmlUpsert(List<SObject> recordsToUpsert) {
+			// Do nothing.
 		}
 	}
 
