@@ -111,9 +111,10 @@ private class Test_DMLManager {
 		System.runAs(restrictedUser){
 			a1.Name = 'Apple Updated';
 			DMLManager.updateAsSystem(new Account[]{a1});
-			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
-			System.assertEquals('Apple Updated', a1Reload.Name);
 		}
+		
+		Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
+		System.assertEquals('Apple Updated', a1Reload.Name);
 	}
 	
 	static testMethod void systemUpsert(){
@@ -129,9 +130,10 @@ private class Test_DMLManager {
 		
 		System.runAs(restrictedUser){
 			DMLManager.upsertAsSystem(new Account[]{a1Clone});
-			Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
-			System.assertEquals('Apple Updated', a1Reload.Name);
 		}
+		
+		Account a1Reload = [SELECT Name FROM Account WHERE Id = :a1.Id];
+		System.assertEquals('Apple Updated', a1Reload.Name);
 	}
 
 	static testMethod void systemDelete(){
