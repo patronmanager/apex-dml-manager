@@ -276,7 +276,8 @@ public inherited sharing class DMLManager {
 	}
 
 	// If the consumer desires a customized DML experience, including mock SObject unit testing:
-	// 1. Create an Apex class implementing the DMLManager.IDML interface and having the desired functionality
+	// 1. Create an Apex class that either extends SimpleDML and overrides the method(s) you wish to customize 
+	//    or create a new Apex class that implements the IDML interface
 	// 2. Set DMLManager.dmlOperations property to an instance of the Apex class
 	// 3. Execute the appropriate *AsUser or *AsSystem methods as usual
 	private static IDML dmlOperations = new SimpleDML();
