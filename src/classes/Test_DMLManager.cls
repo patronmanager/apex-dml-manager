@@ -522,7 +522,7 @@ private class Test_DMLManager {
 	}
 
 	@IsTest
-	static void dmlOperation_When_CustomInertDmlOperationsAreSpecified_Expect_NoChangesWithinServer() {
+	static void dmlOperation_When_CustomInertDMLOperationsAreSpecified_Expect_NoChangesWithinServer() {
 
 		Contact ctc = new Contact();
 		ctc.FirstName = 'Jeremiah';
@@ -539,35 +539,35 @@ private class Test_DMLManager {
 		ctc.LastName = 'Long';
 
 		// Injecting the inert DML class
-		DMLManager.setDmlImplementation(new InertDML());
+		DMLManager.setDMLImplementation(new InertDML());
 
 		DMLManager.updateAsUser(ctc);
 
-		// Since the InertDml does nothing, the DMLManager operation respectively does nothing,
+		// Since the InertDML does nothing, the DMLManager operation respectively does nothing,
 		// therefore the Contact is NOT saved within Salesforce.
 		actualContactList = [select LastName from Contact where Id= :ctc.Id];
 		System.assertEquals(expectedLastName, actualContactList.get(0).LastName, 'The Contact should retain the original data.');
 	}
 
-	private class InertDml extends DMLManager.SimpleDML {
+	private class InertDML extends DMLManager.SimpleDML {
 		public override void dmlDelete(List<SObject> recordsToDelete) {
-			// Do nothing.
+			return;
 		}
 
 		public override void dmlInsert(List<SObject> recordsToInsert) {
-			// Do nothing.
+			return;
 		}
 
 		public override void dmlMerge(sObject masterRecord, List<SObject> duplicateRecords) {
-			// Do nothing.
+			return;
 		}
 
 		public override void dmlUpdate(List<SObject> recordsToUpdate) {
-			// Do nothing.
+			return;
 		}
 
 		public override void dmlUpsert(List<SObject> recordsToUpsert) {
-			// Do nothing.
+			return;
 		}
 	}
 

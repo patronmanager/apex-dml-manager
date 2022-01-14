@@ -282,7 +282,7 @@ public inherited sharing class DMLManager {
 	// 3. Execute the appropriate *AsUser or *AsSystem methods as usual
 	private static IDML dmlOperations = new SimpleDML();
 
-	public static void setDmlImplementation(IDML dmlImplementation) {
+	public static void setDMLImplementation(IDML dmlImplementation) {
 		dmlOperations = dmlImplementation;
 	}
 
@@ -296,7 +296,7 @@ public inherited sharing class DMLManager {
 		void dmlUpsert(List<SObject> objList);
 	}
 
-	public virtual class SimpleDML
+	public inherited sharing virtual class SimpleDML
 		implements IDML
 	{
 		public virtual void dmlInsert(List<SObject> objList)
