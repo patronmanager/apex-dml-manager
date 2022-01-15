@@ -43,18 +43,18 @@ public inherited sharing class DMLManager {
 	public static void deleteAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_DELETE);}
 	public static void mergeAsUser(SObject masterObj, List<SObject> mergeList){ performDMLMergeOperation(masterObj, mergeList);}
 	
-	// Pass-thru methods to raw DML operations. 
+	// Pass-thru methods to desired DML operations as configured by consumer.
 	// Use these sparingly, and only with good reason, since the DML operations are not CRUD/FLS safe
-	public static void insertAsSystem(sObject obj){ insert obj; }
-	public static void updateAsSystem(sObject obj){ update obj; }
-	public static void upsertAsSystem(sObject obj){ upsert obj; }
-	public static void deleteAsSystem(sObject obj){ delete obj; }
-	public static void mergeAsSystem(SObject masterObj, SObject mergeObj){ Database.merge(masterObj, mergeObj); }
-	public static void insertAsSystem(List<SObject> objList){ insert objList; }
-	public static void updateAsSystem(List<SObject> objList){ update objList; }
-	public static void upsertAsSystem(List<SObject> objList){ upsert objList; }
-	public static void deleteAsSystem(List<SObject> objList){ delete objList; }
-	public static void mergeAsSystem(SObject masterObj, List<SObject> mergeList){ Database.merge(masterObj, mergeList); }
+	public static void insertAsSystem(sObject obj){ dmlOperations.dmlInsert(new List<SObject> {obj}); }
+	public static void updateAsSystem(sObject obj){ dmlOperations.dmlUpdate(new List<SObject> {obj}); }
+	public static void upsertAsSystem(sObject obj){ dmlOperations.dmlUpsert(new List<SObject> {obj}); }
+	public static void deleteAsSystem(sObject obj){ dmlOperations.dmlDelete(new List<SObject> {obj}); }
+	public static void mergeAsSystem(SObject masterObj, SObject mergeObj){ dmlOperations.dmlMerge(masterObj, new List<SObject> {mergeObj}); }
+	public static void insertAsSystem(List<SObject> objList){ dmlOperations.dmlInsert(objList); }
+	public static void updateAsSystem(List<SObject> objList){ dmlOperations.dmlUpdate(objList); }
+	public static void upsertAsSystem(List<SObject> objList){ dmlOperations.dmlUpsert(objList); }
+	public static void deleteAsSystem(List<SObject> objList){ dmlOperations.dmlDelete(objList); }
+	public static void mergeAsSystem(SObject masterObj, List<SObject> mergeList){ dmlOperations.dmlMerge(masterObj, mergeList); }
 	
 	// Custom Exception Classes
 	public virtual class DMLManagerException extends Exception{
@@ -102,11 +102,11 @@ public inherited sharing class DMLManager {
 				}
 			}
 		}
-		// If no errors have been thrown to this point, execute the dml operation.
-		if(dmlOperation == Operation.OP_INSERT){insert objList;} 
-			else if (dmlOperation == Operation.OP_UPDATE){update objList;} 
-				else if (dmlOperation == Operation.OP_UPSERT){upsertCollection(objList);}
-					else if (dmlOperation == Operation.OP_DELETE){delete objList;}
+		// If no errors have been thrown to this point, execute the dml operation via pass-through methods.
+		if(dmlOperation == Operation.OP_INSERT){insertAsSystem(objList);} 
+			else if (dmlOperation == Operation.OP_UPDATE){updateAsSystem(objList);} 
+				else if (dmlOperation == Operation.OP_UPSERT){upsertAsSystem(objList);}
+					else if (dmlOperation == Operation.OP_DELETE){deleteAsSystem(objList);}
 	}
 	
 	/**
@@ -126,19 +126,8 @@ public inherited sharing class DMLManager {
 		checkCRUDPermission(new Set<SObjectType>{mergeList[0].getSObjectType()},Operation.OP_DELETE);
 		
 		// If no errors have been thrown to this point, execute the merge operation.
-		Database.merge(masterObj, mergeList);
+		mergeAsSystem(masterObj, mergeList);
 	}
-	
-	private static void upsertCollection(List<SObject> objList){
-		// This is to deal with a call to upsertAsUser with a singular object.
-		// Since we wrap that into a List<SObject> (which can't be passed into an upsert)
-		// we unpack it and upsert the object individually.
-		if(objList.size() == 1){
-			upsert objList.get(0);
-		} else {
-			upsert objList;
-		}
-	} 
 	
 	private static Map<String,Object> getFieldMapFromExistingSObject(SObject obj){
 		// Get actual fields present in object.  The getPopulatedFieldsAsMap method removes implicit nulls.
@@ -170,7 +159,7 @@ public inherited sharing class DMLManager {
 		}
 		
 		if(existingRecord == null){
-		    throw new DMLManagerException('DMLManager ERROR:  An existing record could not be found for object with Id = ' + obj.Id);
+			throw new DMLManagerException('DMLManager ERROR:  An existing record could not be found for object with Id = ' + obj.Id);
 		}
 
 		Map<String,Object> fieldsMap = getFieldMapFromExistingSObject(obj);
@@ -284,6 +273,51 @@ public inherited sharing class DMLManager {
 			}
 			operationRestrictedFields.put(obj.getSObjectType(),restrictedFields);
 		}
-	}	
+	}
 
+	// If the consumer desires a customized DML experience, including mock SObject unit testing:
+	// 1. Create an Apex class that either extends SimpleDML and overrides the method(s) you wish to customize 
+	//    or create a new Apex class that implements the IDML interface
+	// 2. Set DMLManager.dmlOperations property to an instance of the Apex class
+	// 3. Execute the appropriate *AsUser or *AsSystem methods as usual
+	private static IDML dmlOperations = new SimpleDML();
+
+	public static void setDMLImplementation(IDML dmlImplementation) {
+		dmlOperations = dmlImplementation;
+	}
+
+	// "Operation" suffix needed since the root DML operation name is an Apex keyword.
+	public interface IDML
+	{
+		void dmlInsert(List<SObject> objList);
+		void dmlUpdate(List<SObject> objList);
+		void dmlDelete(List<SObject> objList);
+		void dmlMerge(SObject masterRecord, List<SObject> objList);
+		void dmlUpsert(List<SObject> objList);
+	}
+
+	public inherited sharing virtual class SimpleDML
+		implements IDML
+	{
+		public virtual void dmlInsert(List<SObject> objList)
+		{
+			insert objList;
+		}
+		public virtual void dmlUpdate(List<SObject> objList)
+		{
+			update objList;
+		}
+		public virtual void dmlDelete(List<SObject> objList)
+		{
+			delete objList;
+		}
+		public virtual void dmlMerge(SObject masterRecord, List<SObject> objList)
+		{
+			Database.merge(masterRecord, objList);
+		}
+		public virtual void dmlUpsert(List<SObject> objList)
+		{
+			upsert objList;
+		}
+	}
 }

@@ -175,6 +175,34 @@ private class Test_DMLManager {
 	
 	}
 	
+	@IsTest
+	static void mergeAsSystem_When_PassingASingleSObject_Expect_Success() {
+		// Insert a master account and two merge accounts
+		List<Account> accList = new List<Account>{
+			new Account(Name = 'Master Account'),
+			new Account(Name = 'Merge One')
+		};
+		
+		User restrictedUser = getRestrictedUser();
+		
+		System.runAs(restrictedUser){
+			insert accList;
+			
+			Account masterAcct = [SELECT Id, Name FROM Account WHERE Name = 'Master Account'];
+			List<Account> mergeList = [SELECT Id, Name FROM Account WHERE Name LIKE 'Merge%'];
+			System.assertEquals(1, mergeList.size());
+			
+			DMLManager.mergeAsSystem(masterAcct, mergeList.get(0));
+		}
+		
+		// Make sure 'Master Account' is still there.
+		Account masterAcct = [SELECT Id FROM Account WHERE Name = 'Master Account'];
+		
+		//Make sure merge accounts are gone
+		List<Account> mergeList = [SELECT Id FROM Account WHERE Name LIKE 'Merge%'];
+		System.assertEquals(0, mergeList.size());
+	}
+	
 	static testMethod void flsRestrictedInsert(){
 		Campaign c1 = new Campaign(Name = 'Test1 Campaign');
 		System.runAs(new User(Id = UserInfo.getUserId())){
@@ -491,7 +519,57 @@ private class Test_DMLManager {
 			//expected
 			System.assert(dmle.getMessage().contains('An existing record could not be found'));
 		}
-	} 
+	}
+
+	@IsTest
+	static void dmlOperation_When_CustomInertDMLOperationsAreSpecified_Expect_NoChangesWithinServer() {
+
+		Contact ctc = new Contact();
+		ctc.FirstName = 'Jeremiah';
+		ctc.LastName = 'Matthews';
+		String expectedLastName = ctc.LastName;
+
+		// ------ First let's clearly assert the default DML operation is working ------
+		DMLManager.insertAsUser(ctc);
+		
+		List<Contact> actualContactList = [select Id from Contact where FirstName= :ctc.FirstName and LastName= :ctc.LastName];
+		System.assertEquals(1, actualContactList.size(), 'The Salesforce database should contain the new Contact.');
+
+		// ------ Now let's test the DML Operation injection ------
+		ctc.LastName = 'Long';
+
+		// Injecting the inert DML class
+		DMLManager.setDMLImplementation(new InertDML());
+
+		DMLManager.updateAsUser(ctc);
+
+		// Since the InertDML does nothing, the DMLManager operation respectively does nothing,
+		// therefore the Contact is NOT saved within Salesforce.
+		actualContactList = [select LastName from Contact where Id= :ctc.Id];
+		System.assertEquals(expectedLastName, actualContactList.get(0).LastName, 'The Contact should retain the original data.');
+	}
+
+	private class InertDML extends DMLManager.SimpleDML {
+		public override void dmlDelete(List<SObject> recordsToDelete) {
+			return;
+		}
+
+		public override void dmlInsert(List<SObject> recordsToInsert) {
+			return;
+		}
+
+		public override void dmlMerge(sObject masterRecord, List<SObject> duplicateRecords) {
+			return;
+		}
+
+		public override void dmlUpdate(List<SObject> recordsToUpdate) {
+			return;
+		}
+
+		public override void dmlUpsert(List<SObject> recordsToUpsert) {
+			return;
+		}
+	}
 
 	private static void assignObjectPermission(User u, String objectType, Boolean create, Boolean edit, Boolean remove){
       	PermissionSet ps = new PermissionSet(Name = 'Enable' + objectType, Label = 'Enable ' + objectType);
