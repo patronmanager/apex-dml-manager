@@ -53,7 +53,7 @@ private class Test_DMLManager {
 			// "Minimum Access - Salesforce" if it's present.
 			ProfileId = profileList[0].Id,
 			TimeZoneSidKey='America/Los_Angeles',
-			Username='crudmanageruser1@testorg.com'
+			Username='crudmanageruser.' + Datetime.now().getTime() + '@testorg.com' // Generate a random username
 		);
 		insert restrictedUser;
 		
@@ -86,7 +86,7 @@ private class Test_DMLManager {
 	}
 	
 	private static User getRestrictedUser() {
-		return [SELECT Id FROM User WHERE Username = 'crudmanageruser1@testorg.com'];
+		return [SELECT Id FROM User WHERE Username LIKE 'crudmanageruser%'];
 	}
 	
 	static testMethod void systemInsert(){
