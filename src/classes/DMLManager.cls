@@ -32,16 +32,34 @@ public inherited sharing class DMLManager {
 	public enum Operation {OP_INSERT,OP_UPDATE,OP_DELETE,OP_UPSERT}
 	
 	// CRUD/FLS-safe DML operations. These honor the CRUD and FLS permissions of the running user
-	public static void insertAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_INSERT);}
-	public static void updateAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPDATE);}
-	public static void upsertAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_UPSERT);}
-	public static void deleteAsUser(sObject obj){performDMLOperation(new List<sObject>{obj},Operation.OP_DELETE);}
-	public static void mergeAsUser(sObject masterObj, SObject mergeObj){ performDMLMergeOperation(masterObj, new List<SObject>{mergeObj});}
-	public static void insertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_INSERT);}
-	public static void updateAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPDATE);}
-	public static void upsertAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_UPSERT);}
-	public static void deleteAsUser(List<SObject> objList){performDMLOperation(objList,Operation.OP_DELETE);}
-	public static void mergeAsUser(SObject masterObj, List<SObject> mergeList){ performDMLMergeOperation(masterObj, mergeList);}
+	public static void insertAsUser(sObject obj){insertAsUser(new List<sObject>{obj});}
+	public static void updateAsUser(sObject obj){updateAsUser(new List<sObject>{obj});}
+	public static void upsertAsUser(sObject obj){upsertAsUser(new List<sObject>{obj});}
+	public static void deleteAsUser(sObject obj){deleteAsUser(new List<sObject>{obj});}
+	public static void mergeAsUser(sObject masterObj, SObject mergeObj){ mergeAsUser(masterObj, new List<SObject>{mergeObj});}
+
+	public static void insertAsUser(List<SObject> objList){
+		Database.insertWithAccess(objList,AccessLevel.USER_MODE);
+		//performDMLOperation(objList,Operation.OP_INSERT);
+	}
+	public static void updateAsUser(List<SObject> objList){
+		Database.updateWithAccess(objList,AccessLevel.USER_MODE);
+		//performDMLOperation(objList,Operation.OP_UPDATE);
+	}
+	public static void upsertAsUser(List<SObject> objList){
+		Database.upsertWithAccess(objList,AccessLevel.USER_MODE);
+		//performDMLOperation(objList,Operation.OP_UPSERT);
+	}
+	public static void deleteAsUser(List<SObject> objList){
+		Database.deleteWithAccess(objList,AccessLevel.USER_MODE);
+		//performDMLOperation(objList,Operation.OP_DELETE);
+	}
+	public static void mergeAsUser(SObject masterObj, List<SObject> mergeList){
+		performDMLMergeOperation(masterObj, mergeList);
+	}
+	public static List<SObject> queryAsUser(String soql){
+		return Database.queryWithAccess(soql,AccessLevel.USER_MODE);
+	}
 	
 	// Pass-thru methods to desired DML operations as configured by consumer.
 	// Use these sparingly, and only with good reason, since the DML operations are not CRUD/FLS safe
